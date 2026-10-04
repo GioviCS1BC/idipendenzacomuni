@@ -11,38 +11,32 @@ import altair as alt
 
 @st.cache_data(show_spinner=False)
 def ottieni_nome_comune(lat, lon):
-    """Usa Nominatim per ottenere il nome testuale del comune dalle coordinate."""
     try:
         url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=10"
         headers = {'User-Agent': 'Streamlit-Energy-App'}
         res = requests.get(url, headers=headers).json()
         address = res.get('address', {})
-        
         return address.get('city', address.get('town', address.get('village', address.get('county', 'Comune Selezionato'))))
     except:
         return "Comune Selezionato"
 
 @st.cache_data(show_spinner=False)
 def ottieni_popolazione(nome_comune):
-    """Interroga l'API di Open-Meteo Geocoding per ottenere gli abitanti reali del comune."""
     if nome_comune == "Comune Selezionato" or not nome_comune:
         return 5000
-        
     try:
         url = f"https://geocoding-api.open-meteo.com/v1/search?name={nome_comune}&count=1&language=it"
         res = requests.get(url).json()
-        
         if "results" in res and len(res["results"]) > 0:
             popolazione = res["results"][0].get("population")
             if popolazione and popolazione > 0:
                 return int(popolazione)
     except Exception as e:
         print(f"Errore API Popolazione: {e}")
-        
     return 5000 
 
 # ==========================================
-# FUNZIONI DI CALCOLO ENERGETICO (PVGIS)
+# FUNZIONI DI CALCOLO ENERGETICO
 # ==========================================
 
 @st.cache_data(show_spinner=False)
@@ -53,7 +47,6 @@ def scarica_profili_fotovoltaico(lat, lon):
         "peakpower": 1.0, "loss": 14.0, "outputformat": "json", 
         "startyear": 2017, "endyear": 2020, "optimalangles": 1 
     }
-        
     resp_pv = requests.get(url_pv, params=params_pv)
     if resp_pv.status_code != 200: return None
     
@@ -61,7 +54,6 @@ def scarica_profili_fotovoltaico(lat, lon):
     df_pv = pd.DataFrame(data_pv['outputs']['hourly'])
     df_pv['Data_Ora'] = pd.to_datetime(df_pv['time'], format='%Y%m%d:%H%M').dt.floor('h')
     df_pv['FV_Normalizzato'] = df_pv['P'] / 1000.0 
-    
     return df_pv[['Data_Ora', 'FV_Normalizzato']]
 
 @st.cache_data(show_spinner=False)
@@ -158,19 +150,15 @@ with col2:
     
     fabbisogno_annuo_mwh = popolazione * 6.0
     carico_medio_mw = fabbisogno_annuo_mwh / 8760.0
-    batteria_mwh = carico_medio_mw * 4.0 
-    
-    st.info(f"⚡ **Fabbisogno Stimato:** {fabbisogno_annuo_mwh:,.0f} MWh/anno  \n"
-            f"🔋 **Accumulo Richiesto (4 ore):** {batteria_mwh:,.1f} MWh")
+    st.info(f"⚡ **Fabbisogno Stimato:** {fabbisogno_annuo_mwh:,.0f} MWh/anno")
     
     st.markdown("---")
-    st.subheader("☀️ Dimensionamento Territoriale")
+    st.subheader("☀️ Dimensionamento Impianti")
     
-    # 1 MWp produce circa 1200 MWh/anno. Calcoliamo i MW necessari, poi gli ettari.
+    # 1. Slider Fotovoltaico (Ettari)
     pv_suggerito_mw = fabbisogno_annuo_mwh / 1200.0 
-    ettari_suggeriti = pv_suggerito_mw * 1.2 # 1 MWp = 1.2 Ettari
+    ettari_suggeriti = pv_suggerito_mw * 1.2 
     
-    # Nuovo slider in Ettari
     ettari_selezionati = st.slider(
         "Superficie Fotovoltaica da Installare (Ettari):", 
         min_value=0.0, 
@@ -178,10 +166,21 @@ with col2:
         value=float(round(ettari_suggeriti)), 
         step=0.5
     )
-    
-    # Riconversione in Megawatt per il motore di calcolo
     cap_pv_mw = ettari_selezionati / 1.2
-    st.caption(f"⚡ *{ettari_selezionati} ettari di suolo o tetti corrispondono a circa **{cap_pv_mw:.1f} MWp** di potenza.*")
+    st.caption(f"⚡ *Corrisponde a circa **{cap_pv_mw:.1f} MWp** di potenza.*")
+    
+    # 2. Slider Batterie (Ore calcolate sulla potenza FV)
+    ore_batteria = st.slider(
+        "Capacità di Accumulo (Ore rispetto al picco FV):", 
+        min_value=0.0, 
+        max_value=12.0, 
+        value=4.0, 
+        step=0.5,
+        help="Dimensiona la batteria moltiplicando la potenza FV scelta per queste ore. Es: 4 ore su un impianto da 10 MWp = 40 MWh di batteria."
+    )
+    # Calcolo corretto: Ore * Potenza di picco FV
+    batteria_mwh = cap_pv_mw * ore_batteria
+    st.caption(f"🔋 *Corrisponde a un banco batterie da **{batteria_mwh:.1f} MWh** ({ore_batteria} ore × {cap_pv_mw:.1f} MWp).*")
 
 st.divider()
 
