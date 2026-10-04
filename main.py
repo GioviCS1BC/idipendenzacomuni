@@ -115,6 +115,16 @@ def esegui_simulazione_comunale(df_energia, cap_pv_mw, carico_medio_mw, cap_batt
 st.set_page_config(page_title="Pianificatore FV Comunale", layout="wide")
 st.title("🏙️ Pianificatore di Indipendenza Energetica Comunale")
 
+with st.expander("📖 README - Informazioni sul progetto"):
+    st.markdown("""
+    Questo strumento è stato creato da **Giovanni Ludovico Montagnani** per aiutare i Comuni e le amministrazioni locali a capire 
+    esattamente quanto fotovoltaico e quanta capacità di accumulo servirebbero per raggiungere una reale e solida **autonomia energetica**.
+    
+    Spesso si fatica a visualizzare la transizione ecologica su scala locale. Questo simulatore traduce il fabbisogno energetico in 
+    grandezze fisiche intuitive (ettari di terreno o tetti da coprire) e calcola in modo realistico la dipendenza dalla rete, lo spreco (curtailment) 
+    e i costi di investimento (CAPEX), basandosi su 4 anni di dati meteorologici orari reali forniti dai database europei (PVGIS).
+    """)
+
 if "lat" not in st.session_state: 
     st.session_state.lat, st.session_state.lon = 41.9028, 12.4964
     st.session_state.nome_comune = "Roma"
@@ -155,7 +165,6 @@ with col2:
     st.markdown("---")
     st.subheader("☀️ Dimensionamento Impianti")
     
-    # 1. Slider Fotovoltaico (Ettari)
     pv_suggerito_mw = fabbisogno_annuo_mwh / 1200.0 
     ettari_suggeriti = pv_suggerito_mw * 1.2 
     
@@ -169,7 +178,6 @@ with col2:
     cap_pv_mw = ettari_selezionati / 1.2
     st.caption(f"⚡ *Corrisponde a circa **{cap_pv_mw:.1f} MWp** di potenza.*")
     
-    # 2. Slider Batterie (Ore calcolate sulla potenza FV)
     ore_batteria = st.slider(
         "Capacità di Accumulo (Ore rispetto al picco FV):", 
         min_value=0.0, 
@@ -178,11 +186,31 @@ with col2:
         step=0.5,
         help="Dimensiona la batteria moltiplicando la potenza FV scelta per queste ore. Es: 4 ore su un impianto da 10 MWp = 40 MWh di batteria."
     )
-    # Calcolo corretto: Ore * Potenza di picco FV
     batteria_mwh = cap_pv_mw * ore_batteria
-    st.caption(f"🔋 *Corrisponde a un banco batterie da **{batteria_mwh:.1f} MWh** ({ore_batteria} ore × {cap_pv_mw:.1f} MWp).*")
+    st.caption(f"🔋 *Corrisponde a un banco batterie da **{batteria_mwh:.1f} MWh**.*")
 
 st.divider()
+
+# ==========================================
+# SEZIONE CAPEX
+# ==========================================
+st.subheader("💰 Stima Investimento Iniziale (CAPEX)")
+
+# Calcolo dei costi
+costo_fv = cap_pv_mw * 1_000_000       # 1000 € per kW = 1.000.000 € per MW
+costo_batt = batteria_mwh * 150_000    # 150.000 € per MWh
+costo_totale = costo_fv + costo_batt
+
+def formatta_euro(cifra):
+    """Formatta la cifra in stile italiano (es: € 1.000.000)"""
+    return f"€ {cifra:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+col_c1, col_c2, col_c3 = st.columns(3)
+col_c1.metric("Pannelli FV (1.000 €/kW)", formatta_euro(costo_fv))
+col_c2.metric("Batterie (150.000 €/MWh)", formatta_euro(costo_batt))
+col_c3.metric("TOTALE IMPIANTO", formatta_euro(costo_totale))
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 esegui = st.button("🚀 Esegui Analisi di Copertura Energetica", use_container_width=True, type="primary")
 
