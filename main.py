@@ -122,7 +122,7 @@ with st.expander("📖 README - Informazioni sul progetto"):
     
     Spesso si fatica a visualizzare la transizione ecologica su scala locale. Questo simulatore traduce il fabbisogno energetico in 
     grandezze fisiche intuitive (ettari di terreno o tetti da coprire) e calcola in modo realistico la dipendenza dalla rete, lo spreco (curtailment) 
-    e i costi di investimento (CAPEX), basandosi su 4 anni di dati meteorologici orari reali forniti dai database europei (PVGIS).
+    e il ritorno economico (Payback), basandosi su 4 anni di dati meteorologici orari reali forniti dai database europei (PVGIS).
     """)
 
 if "lat" not in st.session_state: 
@@ -183,8 +183,7 @@ with col2:
         min_value=0.0, 
         max_value=12.0, 
         value=4.0, 
-        step=0.5,
-        help="Dimensiona la batteria moltiplicando la potenza FV scelta per queste ore. Es: 4 ore su un impianto da 10 MWp = 40 MWh di batteria."
+        step=0.5
     )
     batteria_mwh = cap_pv_mw * ore_batteria
     st.caption(f"🔋 *Corrisponde a un banco batterie da **{batteria_mwh:.1f} MWh**.*")
@@ -192,23 +191,31 @@ with col2:
 st.divider()
 
 # ==========================================
-# SEZIONE CAPEX
+# SEZIONE FINANZIARIA (CAPEX e ROI)
 # ==========================================
-st.subheader("💰 Stima Investimento Iniziale (CAPEX)")
+st.subheader("💰 Analisi Finanziaria (CAPEX e Risparmio)")
 
-# Calcolo dei costi
-costo_fv = cap_pv_mw * 1_000_000       # 1000 € per kW = 1.000.000 € per MW
-costo_batt = batteria_mwh * 150_000    # 150.000 € per MWh
+costo_fv = cap_pv_mw * 1_000_000       # 1.000 €/kW = 1.000.000 €/MW
+costo_batt = batteria_mwh * 150_000    # 150.000 €/MWh
 costo_totale = costo_fv + costo_batt
 
 def formatta_euro(cifra):
-    """Formatta la cifra in stile italiano (es: € 1.000.000)"""
     return f"€ {cifra:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-col_c1, col_c2, col_c3 = st.columns(3)
-col_c1.metric("Pannelli FV (1.000 €/kW)", formatta_euro(costo_fv))
-col_c2.metric("Batterie (150.000 €/MWh)", formatta_euro(costo_batt))
-col_c3.metric("TOTALE IMPIANTO", formatta_euro(costo_totale))
+c_fin1, c_fin2, c_fin3 = st.columns(3)
+c_fin1.metric("Pannelli FV (1.000 €/kW)", formatta_euro(costo_fv))
+c_fin2.metric("Batterie (150.000 €/MWh)", formatta_euro(costo_batt))
+c_fin3.metric("TOTALE IMPIANTO", formatta_euro(costo_totale))
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Parametro dinamico per il costo dell'energia
+prezzo_energia_kwh = st.number_input(
+    "Prezzo dell'Energia dalla Rete (€/kWh):", 
+    min_value=0.05, max_value=0.50, value=0.15, step=0.01,
+    help="Inserisci il costo al kWh (es. 0,15 €). Questo equivale a 150 €/MWh e serve per calcolare il risparmio generato dall'impianto."
+)
+prezzo_energia_mwh = prezzo_energia_kwh * 1000
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -229,17 +236,29 @@ if esegui:
             rete_annua = res['rete_mwh'] / anni_simulati
             scarto_annuo = res['scarto_mwh'] / anni_simulati
             
+            # Calcolo del ritorno sull'investimento
+            energia_risparmiata_mwh = richiesta_annua - rete_annua
+            risparmio_annuo_euro = energia_risparmiata_mwh * prezzo_energia_mwh
+            payback_anni = costo_totale / risparmio_annuo_euro if risparmio_annuo_euro > 0 else 0
+            
+            # Metriche Energetiche
             m1, m2, m3 = st.columns(3)
             m1.metric("Indipendenza Energetica", f"{res['autonomia']:.1f}%")
             m2.metric("Dipendenza dalla Rete", f"{100 - res['autonomia']:.1f}%", delta_color="inverse")
             m3.metric("Energia Sovrappdotta (Persa)", f"{(scarto_annuo/fv_annuo)*100 if fv_annuo>0 else 0:.1f}%")
             
             st.markdown("---")
-            c1, c2, c3 = st.columns(3)
-            c1.write(f"**Produzione FV Media:** {fv_annuo:,.0f} MWh/anno")
-            c2.write(f"**Acquisto Rete Nazionale:** {rete_annua:,.0f} MWh/anno")
-            c3.write(f"**Energia Sprecata (Curtailment):** {scarto_annuo:,.0f} MWh/anno")
             
+            # Metriche Finanziarie (ROI)
+            st.write("### 💶 Ritorno sull'Investimento (ROI)")
+            r1, r2, r3 = st.columns(3)
+            r1.metric("Energia Risparmiata", f"{energia_risparmiata_mwh:,.0f} MWh/anno")
+            r2.metric("Risparmio in Bolletta", formatta_euro(risparmio_annuo_euro))
+            if payback_anni > 0:
+                r3.metric("Tempo di Rientro (Payback)", f"{payback_anni:.1f} anni")
+            else:
+                r3.metric("Tempo di Rientro (Payback)", "N/A")
+
             st.markdown("---")
             st.subheader("📈 Andamento della Copertura Energetica")
             
