@@ -6,52 +6,43 @@ from streamlit_folium import st_folium
 import altair as alt
 
 # ==========================================
-# GESTIONE DATI WIKIDATA & OPENSTREETMAP
+# GESTIONE DATI GEOGRAFICI E POPOLAZIONE
 # ==========================================
 
 @st.cache_data(show_spinner=False)
-def ottieni_info_comune(lat, lon):
-    """Usa Nominatim per ottenere il nome e l'ID Wikidata esatto dalle coordinate."""
+def ottieni_nome_comune(lat, lon):
+    """Usa Nominatim per ottenere il nome testuale del comune dalle coordinate."""
     try:
-        # Il parametro extratags=1 chiede a OpenStreetMap di fornirci anche i codici Wikidata
-        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=10&extratags=1"
+        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=10"
         headers = {'User-Agent': 'Streamlit-Energy-App'}
         res = requests.get(url, headers=headers).json()
-        
         address = res.get('address', {})
-        extratags = res.get('extratags', {})
         
-        # Cerchiamo il nome
-        nome = address.get('city', address.get('town', address.get('village', address.get('county', 'Comune Selezionato'))))
-        
-        # Estraiamo il codice univoco Q-ID di Wikidata
-        wikidata_id = extratags.get('wikidata')
-        
-        return nome, wikidata_id
+        # Cerca il nome partendo dalla classificazione più precisa
+        return address.get('city', address.get('town', address.get('village', address.get('county', 'Comune Selezionato'))))
     except:
-        return "Comune Selezionato", None
+        return "Comune Selezionato"
 
 @st.cache_data(show_spinner=False)
-def ottieni_popolazione_wikidata(wikidata_id):
-    """Interroga l'API di Wikidata per ottenere la popolazione esatta (Proprietà P1082)."""
-    if not wikidata_id:
+def ottieni_popolazione(nome_comune):
+    """Interroga l'API di Open-Meteo Geocoding per ottenere gli abitanti reali del comune."""
+    if nome_comune == "Comune Selezionato" or not nome_comune:
         return 5000
-    
+        
     try:
-        url = f"https://www.wikidata.org/w/api.php?action=wbgetclaims&entity={wikidata_id}&property=P1082&format=json"
-        headers = {'User-Agent': 'Streamlit-Energy-App'}
-        res = requests.get(url, headers=headers).json()
+        # Cerca il nome della città. count=1 prende il risultato più rilevante
+        url = f"https://geocoding-api.open-meteo.com/v1/search?name={nome_comune}&count=1&language=it"
+        res = requests.get(url).json()
         
-        # Estrae il valore dalla struttura JSON di Wikidata
-        claims = res.get("claims", {}).get("P1082", [])
-        if claims:
-            # L'ammontare è restituito come stringa tipo "+1354196", lo puliamo
-            ammontare_str = claims[0]["mainsnak"]["datavalue"]["value"]["amount"]
-            return int(ammontare_str.replace("+", ""))
+        if "results" in res and len(res["results"]) > 0:
+            # Estrae il campo popolazione dal database
+            popolazione = res["results"][0].get("population")
+            if popolazione and popolazione > 0:
+                return int(popolazione)
     except Exception as e:
-        print(f"Errore API Wikidata: {e}")
+        print(f"Errore API Popolazione: {e}")
         
-    # Valore di default se qualcosa va storto o il dato manca su Wikidata
+    # Valore di default se qualcosa va storto
     return 5000 
 
 # ==========================================
@@ -139,9 +130,8 @@ st.title("🏙️ Pianificatore di Indipendenza Energetica Comunale")
 # Inizializzazione Session State per le coordinate (Default: Roma)
 if "lat" not in st.session_state: 
     st.session_state.lat, st.session_state.lon = 41.9028, 12.4964
-    nome, wiki_id = ottieni_info_comune(st.session_state.lat, st.session_state.lon)
-    st.session_state.nome_comune = nome
-    st.session_state.popolazione = ottieni_popolazione_wikidata(wiki_id)
+    st.session_state.nome_comune = "Roma"
+    st.session_state.popolazione = 2749031
 
 col1, col2 = st.columns([1, 1.2])
 
@@ -151,24 +141,24 @@ with col1:
     folium.Marker([st.session_state.lat, st.session_state.lon], tooltip=st.session_state.nome_comune).add_to(m)
     mappa = st_folium(m, height=350, use_container_width=True)
     
-    # CLICK SULLA MAPPA: Geocoding e Wikidata in tempo reale
+    # CLICK SULLA MAPPA: Estrae il nome e cerca gli abitanti
     if mappa and mappa.get("last_clicked"):
         st.session_state.lat = mappa["last_clicked"]["lat"]
         st.session_state.lon = mappa["last_clicked"]["lng"]
         
         with st.spinner("Ricerca comune e popolazione in corso..."):
-            nuovo_comune, wikidata_id = ottieni_info_comune(st.session_state.lat, st.session_state.lon)
+            nuovo_comune = ottieni_nome_comune(st.session_state.lat, st.session_state.lon)
             st.session_state.nome_comune = nuovo_comune
-            st.session_state.popolazione = ottieni_popolazione_wikidata(wikidata_id)
+            st.session_state.popolazione = ottieni_popolazione(nuovo_comune)
             
         st.rerun()
 
 with col2:
     st.subheader("👥 Parametri del Territorio")
-    # Il valore viene precompilato da Wikidata, ma l'utente può comunque modificarlo a mano se serve
+    # Il valore viene aggiornato automaticamente dal click, ma rimane modificabile
     popolazione = st.number_input(
         "Popolazione del Comune (Abitanti):", 
-        min_value=10, max_value=5000000, 
+        min_value=10, max_value=10000000, 
         value=st.session_state.popolazione, 
         step=100
     )
@@ -192,7 +182,7 @@ with col2:
     )
     
     ettari_stimati = cap_pv_mw * 1.2
-    st.caption(f"📐 *Per installare {cap_pv_mw} MWp servono circa **{ettari_stimati:.1f} ettari** di superfici.*")
+    st.caption(f"📐 *Per installare {cap_pv_mw} MWp servono circa **{ettari_stimati:.1f} ettari** di superfici (tetti o terreni).*")
 
 st.divider()
 
