@@ -18,7 +18,6 @@ def ottieni_nome_comune(lat, lon):
         res = requests.get(url, headers=headers).json()
         address = res.get('address', {})
         
-        # Cerca il nome partendo dalla classificazione più precisa
         return address.get('city', address.get('town', address.get('village', address.get('county', 'Comune Selezionato'))))
     except:
         return "Comune Selezionato"
@@ -30,19 +29,16 @@ def ottieni_popolazione(nome_comune):
         return 5000
         
     try:
-        # Cerca il nome della città. count=1 prende il risultato più rilevante
         url = f"https://geocoding-api.open-meteo.com/v1/search?name={nome_comune}&count=1&language=it"
         res = requests.get(url).json()
         
         if "results" in res and len(res["results"]) > 0:
-            # Estrae il campo popolazione dal database
             popolazione = res["results"][0].get("population")
             if popolazione and popolazione > 0:
                 return int(popolazione)
     except Exception as e:
         print(f"Errore API Popolazione: {e}")
         
-    # Valore di default se qualcosa va storto
     return 5000 
 
 # ==========================================
@@ -127,7 +123,6 @@ def esegui_simulazione_comunale(df_energia, cap_pv_mw, carico_medio_mw, cap_batt
 st.set_page_config(page_title="Pianificatore FV Comunale", layout="wide")
 st.title("🏙️ Pianificatore di Indipendenza Energetica Comunale")
 
-# Inizializzazione Session State per le coordinate (Default: Roma)
 if "lat" not in st.session_state: 
     st.session_state.lat, st.session_state.lon = 41.9028, 12.4964
     st.session_state.nome_comune = "Roma"
@@ -141,7 +136,6 @@ with col1:
     folium.Marker([st.session_state.lat, st.session_state.lon], tooltip=st.session_state.nome_comune).add_to(m)
     mappa = st_folium(m, height=350, use_container_width=True)
     
-    # CLICK SULLA MAPPA: Estrae il nome e cerca gli abitanti
     if mappa and mappa.get("last_clicked"):
         st.session_state.lat = mappa["last_clicked"]["lat"]
         st.session_state.lon = mappa["last_clicked"]["lng"]
@@ -155,7 +149,6 @@ with col1:
 
 with col2:
     st.subheader("👥 Parametri del Territorio")
-    # Il valore viene aggiornato automaticamente dal click, ma rimane modificabile
     popolazione = st.number_input(
         "Popolazione del Comune (Abitanti):", 
         min_value=10, max_value=10000000, 
@@ -171,18 +164,24 @@ with col2:
             f"🔋 **Accumulo Richiesto (4 ore):** {batteria_mwh:,.1f} MWh")
     
     st.markdown("---")
-    st.subheader("☀️ Dimensionamento Fotovoltaico")
+    st.subheader("☀️ Dimensionamento Territoriale")
     
+    # 1 MWp produce circa 1200 MWh/anno. Calcoliamo i MW necessari, poi gli ettari.
     pv_suggerito_mw = fabbisogno_annuo_mwh / 1200.0 
+    ettari_suggeriti = pv_suggerito_mw * 1.2 # 1 MWp = 1.2 Ettari
     
-    cap_pv_mw = st.slider(
-        "Capacità Fotovoltaica da Installare (MWp):", 
-        min_value=0.0, max_value=pv_suggerito_mw * 3, 
-        value=float(round(pv_suggerito_mw)), step=0.5
+    # Nuovo slider in Ettari
+    ettari_selezionati = st.slider(
+        "Superficie Fotovoltaica da Installare (Ettari):", 
+        min_value=0.0, 
+        max_value=max(10.0, float(round(ettari_suggeriti * 2))), 
+        value=float(round(ettari_suggeriti)), 
+        step=0.5
     )
     
-    ettari_stimati = cap_pv_mw * 1.2
-    st.caption(f"📐 *Per installare {cap_pv_mw} MWp servono circa **{ettari_stimati:.1f} ettari** di superfici (tetti o terreni).*")
+    # Riconversione in Megawatt per il motore di calcolo
+    cap_pv_mw = ettari_selezionati / 1.2
+    st.caption(f"⚡ *{ettari_selezionati} ettari di suolo o tetti corrispondono a circa **{cap_pv_mw:.1f} MWp** di potenza.*")
 
 st.divider()
 
