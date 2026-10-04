@@ -115,14 +115,16 @@ def esegui_simulazione_comunale(df_energia, cap_pv_mw, carico_medio_mw, cap_batt
 st.set_page_config(page_title="Pianificatore FV Comunale", layout="wide")
 st.title("🏙️ Pianificatore di Indipendenza Energetica Comunale")
 
-with st.expander("📖 README - Informazioni sul progetto"):
+with st.expander("📖 README - Informazioni sul progetto", expanded=True):
     st.markdown("""
     Questo strumento è stato creato da **Giovanni Ludovico Montagnani** per aiutare i Comuni e le amministrazioni locali a capire 
     esattamente quanto fotovoltaico e quanta capacità di accumulo servirebbero per raggiungere una reale e solida **autonomia energetica**.
     
+    💡 **Lo Scenario di Elettrificazione Totale**  
+    Il simulatore calcola il fabbisogno usando un parametro di **6 MWh annui per abitante**. Questo valore non riflette i consumi odierni (che sono inferiori), ma simula uno scenario in cui **tutto è stato elettrificato**: copre i consumi elettrici classici, l'elettrificazione completa dei **riscaldamenti** (es. tramite pompe di calore) e i servizi.
+    
     Spesso si fatica a visualizzare la transizione ecologica su scala locale. Questo simulatore traduce il fabbisogno energetico in 
-    grandezze fisiche intuitive (ettari di terreno o tetti da coprire) e calcola in modo realistico la dipendenza dalla rete, lo spreco (curtailment) 
-    e il ritorno economico (Payback), basandosi su 4 anni di dati meteorologici orari reali forniti dai database europei (PVGIS).
+    grandezze fisiche intuitive (ettari di terreno o tetti da coprire), stima quanti impianti possono stare sui tetti prima di consumare suolo agricolo, e calcola in modo realistico la dipendenza dalla rete, lo spreco (curtailment) e il ritorno economico (Payback), basandosi su 4 anni di dati meteorologici orari reali forniti dai database europei (PVGIS).
     """)
 
 if "lat" not in st.session_state: 
@@ -158,12 +160,20 @@ with col2:
         step=100
     )
     
+    # 1. Calcolo Spazio Tetti e Fabbisogno
+    mq_tetti_totali = popolazione * 25.0
+    ettari_tetti_disponibili = mq_tetti_totali / 10000.0
     fabbisogno_annuo_mwh = popolazione * 6.0
     carico_medio_mw = fabbisogno_annuo_mwh / 8760.0
-    st.info(f"⚡ **Fabbisogno Stimato:** {fabbisogno_annuo_mwh:,.0f} MWh/anno")
+    
+    st.info(f"🏘️ **Tetti e Superfici Utili stimate:** {ettari_tetti_disponibili:,.1f} ettari  \n"
+            f"*(Stima JRC: ~25 mq di tetto utile/ben orientato per abitante)*")
+            
+    st.info(f"⚡ **Fabbisogno Energetico Futuro:** {fabbisogno_annuo_mwh:,.0f} MWh/anno  \n"
+            f"*(Include consumi elettrici ed elettrificazione totale dei riscaldamenti - 6 MWh/anno per ab.)*")
     
     st.markdown("---")
-    st.subheader("☀️ Dimensionamento Impianti")
+    st.subheader("☀️ Dimensionamento Impianti e Suolo")
     
     pv_suggerito_mw = fabbisogno_annuo_mwh / 1200.0 
     ettari_suggeriti = pv_suggerito_mw * 1.2 
@@ -175,15 +185,26 @@ with col2:
         value=float(round(ettari_suggeriti)), 
         step=0.5
     )
+    
+    # Valutazione consumo di suolo
+    perc_tetti_usati = (ettari_selezionati / ettari_tetti_disponibili) * 100 if ettari_tetti_disponibili > 0 else 0
+    
+    if ettari_selezionati <= ettari_tetti_disponibili:
+        st.success(f"🏠 Stai occupando il **{perc_tetti_usati:.1f}%** dei tetti utili stimati del comune. **Nessun consumo di suolo agricolo.**")
+    else:
+        suolo_agricolo = ettari_selezionati - ettari_tetti_disponibili
+        st.warning(f"⚠️ Hai esaurito i tetti del comune! Stai occupando il 100% dei tetti e **{suolo_agricolo:.1f} ettari di campi agricoli/terreni**.")
+    
     cap_pv_mw = ettari_selezionati / 1.2
-    st.caption(f"⚡ *Corrisponde a circa **{cap_pv_mw:.1f} MWp** di potenza.*")
+    st.caption(f"⚡ *Gli ettari selezionati generano **{cap_pv_mw:.1f} MWp** di potenza.*")
     
     ore_batteria = st.slider(
         "Capacità di Accumulo (Ore rispetto al picco FV):", 
         min_value=0.0, 
         max_value=12.0, 
         value=4.0, 
-        step=0.5
+        step=0.5,
+        help="Dimensiona la batteria moltiplicando la potenza FV scelta per queste ore."
     )
     batteria_mwh = cap_pv_mw * ore_batteria
     st.caption(f"🔋 *Corrisponde a un banco batterie da **{batteria_mwh:.1f} MWh**.*")
