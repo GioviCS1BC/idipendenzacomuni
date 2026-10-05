@@ -119,12 +119,21 @@ with st.expander("📖 README - Informazioni sul progetto", expanded=True):
     st.markdown("""
     Questo strumento è stato creato da **Giovanni Ludovico Montagnani** per aiutare i Comuni e le amministrazioni locali a capire 
     esattamente quanto fotovoltaico e quanta capacità di accumulo servirebbero per raggiungere una reale e solida **autonomia energetica**.
+
+    Va inteso come uno sforzo di divulgazione e non come un uno strumento di progettazione.
     
     💡 **Lo Scenario di Elettrificazione Totale**  
-    Il simulatore calcola il fabbisogno usando un parametro di **6 MWh annui per abitante**. Questo valore non riflette i consumi odierni (che sono inferiori), ma simula uno scenario in cui **tutto è stato elettrificato**: copre i consumi elettrici classici, l'elettrificazione completa dei **riscaldamenti** (es. tramite pompe di calore) e i servizi.
+    Il simulatore calcola il fabbisogno usando un parametro di **6 MWh annui per abitante**. Questo valore non riflette i consumi odierni (che sono inferiori), ma simula uno scenario in cui **tutto è stato elettrificato**: copre i consumi elettrici classici, l'elettrificazione completa dei riscaldamenti (es. tramite pompe di calore) la mobilità e i servizi.
     
     Spesso si fatica a visualizzare la transizione ecologica su scala locale. Questo simulatore traduce il fabbisogno energetico in 
     grandezze fisiche intuitive (ettari di terreno o tetti da coprire), stima quanti impianti possono stare sui tetti prima di consumare suolo agricolo, e calcola in modo realistico la dipendenza dalla rete, lo spreco (curtailment) e il ritorno economico (Payback), basandosi su 4 anni di dati meteorologici orari reali forniti dai database europei (PVGIS).
+    
+    La copertura energetica viene testata con l'irraggiamento di 4 anni di dati metereologici reali. Il profilo di carico è considerato puramente baseload, peggiorativamente, evitando assunzioni sulla futura risposta della domanda.
+
+    Non viene considerato il contributo delle altre fonti di energia a fini semplificativi.
+
+    Il dato sulla disponibilità di superfici utili, è un dato medio per abitante.
+    
     """)
 
 if "lat" not in st.session_state: 
@@ -175,7 +184,7 @@ with col2:
     st.markdown("---")
     st.subheader("☀️ Dimensionamento Impianti e Suolo")
     
-    pv_suggerito_mw = fabbisogno_annuo_mwh / 1200.0 
+    pv_suggerito_mw = fabbisogno_annuo_mwh / 2000.0 
     ettari_suggeriti = pv_suggerito_mw * 1.2 
     
     ettari_selezionati = st.slider(
