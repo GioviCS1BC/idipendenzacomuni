@@ -137,9 +137,9 @@ with st.expander("📖 README - Informazioni sul progetto", expanded=True):
     """)
 
 if "lat" not in st.session_state: 
-    st.session_state.lat, st.session_state.lon = 41.9028, 12.4964
-    st.session_state.nome_comune = "Roma"
-    st.session_state.popolazione = 2749031
+    st.session_state.lat, st.session_state.lon = 45.8161, 8.6102  # Coordinate di Ispra
+    st.session_state.nome_comune = "Ispra"
+    st.session_state.popolazione = 5322
 
 col1, col2 = st.columns([1, 1.2])
 
